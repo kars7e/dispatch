@@ -1,0 +1,42 @@
+---
+resource_types:
+- name: pull-request
+  type: docker-image
+  source:
+    repository: jtarchie/pr
+
+
+resources:
+- name: dispatch
+  type: pull-request
+  source:
+    repo: vmware/dispatch
+    uri: git@github.com:vmware/dispatch.git
+    access_token: ((pull-request-access-token))
+    private_key: ((pull-request-private-key))
+    every: true
+
+- name: k8s-clusters
+  type: pool
+  source:
+    uri: ((lock_repo_uri))
+    branch: master
+    pool: k8s-cluster
+    private_key: ((pull-request-private-key))
+
+jobs:
+- name: deploy-dispatch
+  plan:
+    - put: k8s-clusters
+      params: {aquire: true}
+    - task: deploy-dispatch
+      file: ci/e2e/deploy-dispatch.yml
+
+- name: e2e-tests
+  plan:
+    - get: k8s-clusters
+      passed: [deploy-dispatch]
+    - task: e2e-tests
+      file: ci/e2e/run-tests.yml
+    - put: k8s-clusters
+      params: {release: k8s-clusters}
