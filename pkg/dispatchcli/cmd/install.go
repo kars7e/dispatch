@@ -29,6 +29,8 @@ import (
 
 var (
 	dispatchHelmRepositoryURL = "https://s3-us-west-2.amazonaws.com/dispatch-charts"
+	servicesAvailable         = []string{"certs", "ingress", "postgres", "api-gateway", "dispatch"}
+	servicesEnabled           map[string]bool
 )
 
 type chartConfig struct {
@@ -73,6 +75,10 @@ type openfaasConfig struct {
 	ExposeService bool         `json:"exposeService,omitempty" validate:"omitempty"`
 }
 
+type riffConfig struct {
+	Chart *chartConfig `json:"chart,omitempty" validate:"required"`
+}
+
 type imageConfig struct {
 	Host string `json:"host,omitempty" validate:"required,hostname"`
 	Tag  string `json:"tag,omitempty"  validate:"required"`
@@ -82,25 +88,26 @@ type oauth2ProxyConfig struct {
 	ClientSecret string `json:"clientSecret,omitempty" validate:"required"`
 	CookieSecret string `json:"cookieSecret,omitmepty" validate:"omitempty"`
 }
-type openFaasRepoConfig struct {
+type dockerRegistryConfig struct {
 	Host     string `json:"host,omitempty" validate:"required,hostname"`
 	Password string `json:"password,omitempty" validate:"required"`
 	Email    string `json:"email,omitempty" validate:"required,email"`
 	Username string `json:"username,omitempty" validate:"required"`
 }
 type dispatchInstallConfig struct {
-	Chart        *chartConfig       `json:"chart,omitempty" validate:"required"`
-	Hostname     string             `json:"hostname,omitempty" validate:"required,hostname"`
-	Port         int                `json:"port,omitempty" validate:"required"`
-	Organization string             `json:"organization,omitempty" validate:"required"`
-	Image        *imageConfig       `json:"image,omitempty" validate:"required"`
-	Debug        bool               `json:"debug,omitempty" validate:"omitempty"`
-	Trace        bool               `json:"trace,omitempty" validate:"omitempty"`
-	Database     string             `json:"database,omitempty" validate:"required,eq=postgres"`
-	PersistData  bool               `json:"persistData,omitempty" validate:"omitempty"`
-	OpenFaasRepo openFaasRepoConfig `json:"openfaasRepository,omitempty" validate:"required"`
-	OAuth2Proxy  *oauth2ProxyConfig `json:"oauth2Proxy,omitempty" validate:"required"`
-	TLS          *tlsConfig         `json:"tls,omitempty" validate:"required"`
+	FaaSBackend    string               `json:"faasbackend,omitempty" validate:"required,eq=openfaas|eq=riff"`
+	Chart          *chartConfig         `json:"chart,omitempty" validate:"required"`
+	Hostname       string               `json:"hostname,omitempty" validate:"required,hostname"`
+	Port           int                  `json:"port,omitempty" validate:"required"`
+	Organization   string               `json:"organization,omitempty" validate:"required"`
+	Image          *imageConfig         `json:"image,omitempty" validate:"required"`
+	Debug          bool                 `json:"debug,omitempty" validate:"omitempty"`
+	Trace          bool                 `json:"trace,omitempty" validate:"omitempty"`
+	Database       string               `json:"database,omitempty" validate:"required,eq=postgres"`
+	PersistData    bool                 `json:"persistData,omitempty" validate:"omitempty"`
+	DockerRegistry dockerRegistryConfig `json:"dockerRegistry,omitempty" validate:"required"`
+	OAuth2Proxy    *oauth2ProxyConfig   `json:"oauth2Proxy,omitempty" validate:"required"`
+	TLS            *tlsConfig           `json:"tls,omitempty" validate:"required"`
 }
 
 type installConfig struct {
@@ -109,6 +116,7 @@ type installConfig struct {
 	PostgresConfig    *postgresConfig        `json:"postgresql,omitempty" validate:"required"`
 	APIGateway        *apiGatewayConfig      `json:"apiGateway,omitempty" validate:"required"`
 	OpenFaas          *openfaasConfig        `json:"openfaas,omitempty" validate:"required"`
+	Riff              *riffConfig            `json:"riff,omitempty" validate:"required"`
 	DispatchConfig    *dispatchInstallConfig `json:"dispatch,omitempty" validate:"required"`
 }
 
@@ -117,7 +125,7 @@ var (
 
 	installExample    = i18n.T(``)
 	installConfigFile = i18n.T(``)
-	installServices   = []string{}
+	installServices   []string
 	installChartsDir  = i18n.T(``)
 	installChartsRepo = i18n.T(``)
 	installDryRun     = false
@@ -144,7 +152,7 @@ func NewCmdInstall(out io.Writer, errOut io.Writer) *cobra.Command {
 	}
 
 	cmd.Flags().StringVarP(&installConfigFile, "file", "f", "", "Path to YAML file")
-	cmd.Flags().StringArrayVarP(&installServices, "service", "s", []string{}, "Service to install (defaults to all)")
+	cmd.Flags().StringArrayVarP(&installServices, "service", "s", []string{}, "Service to install (defaults to all). Add 'no-' prefix to service name to disable it.")
 	cmd.Flags().BoolVar(&installDryRun, "dry-run", false, "Do a dry run, but don't install anything")
 	cmd.Flags().BoolVar(&installDebug, "debug", false, "Extra debug output")
 	cmd.Flags().StringVar(&installChartsRepo, "charts-repo", "dispatch", "Helm Chart Repo used")
@@ -273,11 +281,11 @@ func helmInstall(out, errOut io.Writer, meta *chartConfig, options map[string]st
 		args = append(args, "--dry-run")
 	}
 	if installDebug {
-		fmt.Fprintf(out, "debug: helm")
+		fmt.Fprint(out, "debug: helm")
 		for _, a := range args {
 			fmt.Fprintf(out, " %s", a)
 		}
-		fmt.Fprintf(out, "\n")
+		fmt.Fprint(out, "\n")
 	}
 
 	helm := exec.Command("helm", args...)
@@ -313,18 +321,18 @@ func writeConfig(out, errOut io.Writer, configDir string, config *installConfig)
 func readConfig(out, errOut io.Writer, file string) (*installConfig, error) {
 	b, err := ioutil.ReadFile(file)
 	if err != nil {
-		return nil, errors.Wrapf(err, "Error reading file %s", file)
+		return nil, errors.Wrapf(err, "error reading file %s", file)
 	}
 	config := installConfig{}
 	err = yaml.Unmarshal(b, &config)
 	if err != nil {
-		return nil, errors.Wrapf(err, "Error decoding yaml file %s", file)
+		return nil, errors.Wrapf(err, "error decoding yaml file %s", file)
 	}
 
 	defaultInstallConfig := installConfig{}
 	err = yaml.Unmarshal([]byte(defaultInstallConfigYaml), &defaultInstallConfig)
 	if err != nil {
-		return nil, errors.Wrapf(err, "Error decoding default install config yaml file")
+		return nil, errors.Wrapf(err, "error decoding default install config yaml file")
 	}
 	if installDebug {
 		b, _ := json.MarshalIndent(config, "", "    ")
@@ -333,21 +341,73 @@ func readConfig(out, errOut io.Writer, file string) (*installConfig, error) {
 	}
 	err = mergo.Merge(&config, defaultInstallConfig)
 	if err != nil {
-		return nil, errors.Wrapf(err, "Error merging default values")
+		return nil, errors.Wrapf(err, "error merging default values")
 	}
 	return &config, nil
 }
 
-func installService(service string) bool {
-	if len(installServices) == 0 || (len(installServices) == 1 && installServices[0] == "all") {
-		return true
+func selectServices(out io.Writer, config *installConfig) error {
+	for _, service := range servicesAvailable {
+		servicesEnabled[service] = true
 	}
-	for _, s := range installServices {
-		if service == s {
-			return true
+
+	servicesEnabled[config.DispatchConfig.FaaSBackend] = true
+
+	// Most used combination - all services enabled and default backend
+	if len(installServices) == 0 || installServices[0] == "all" {
+		return nil
+	}
+
+	// We have two modes: whitelisting or blacklisting. Adding "no-" prefix to the service name
+	// enters blacklist mode. Modes cannot be mixed.
+	var whitelistMode, blacklistMode bool
+
+	for _, service := range installServices {
+		if strings.HasPrefix(service, "no-") {
+			blacklistMode = true
+			service := strings.TrimPrefix(service, "no-")
+			if _, ok := servicesEnabled[service]; !ok {
+				return fmt.Errorf("unknown service: %s", service)
+			}
+
+			if whitelistMode {
+				return errors.New("can either whitelist or blacklist services, not both.")
+			}
+
+			servicesEnabled[service] = false
+		} else {
+			// whitelist mode
+			if !whitelistMode {
+				// we entered whitelist mode, during first encounter we need to reset enabled services
+				for service := range servicesEnabled {
+					servicesEnabled[service] = false
+				}
+				whitelistMode = true
+			}
+
+			if _, ok := servicesEnabled[service]; !ok {
+				return fmt.Errorf("unknown service: %s", service)
+			}
+
+			if blacklistMode {
+				return errors.New("can either whitelist or blacklist services, not both.")
+			}
+			servicesEnabled[service] = true
 		}
 	}
-	return false
+	if installDebug {
+		fmt.Fprint(out, "\nServices to be installed:\n")
+		for service, enabled := range servicesEnabled {
+			if enabled {
+				fmt.Fprintf(out, "* %s\n", service)
+			}
+		}
+	}
+	return nil
+}
+
+func installService(service string) bool {
+	return servicesEnabled[service]
 }
 
 func getK8sServiceNodePort(service, namespace string, https bool) (int, error) {
@@ -368,7 +428,7 @@ func getK8sServiceNodePort(service, namespace string, https bool) (int, error) {
 	}
 	nodePort, err := strconv.Atoi(string(kubectlOut))
 	if err != nil {
-		return -1, errors.Wrapf(err, "Error fetching node port")
+		return -1, errors.Wrapf(err, "error fetching node port")
 	}
 	return nodePort, nil
 }
@@ -383,7 +443,7 @@ func runInstall(out, errOut io.Writer, cmd *cobra.Command, args []string) error 
 	validate := validator.New()
 	err = validate.Struct(config)
 	if err != nil {
-		return errors.Wrapf(err, "Configuration error")
+		return errors.Wrapf(err, "configuration error")
 	}
 
 	if config.HelmRepositoryURL != "" {
@@ -401,25 +461,27 @@ func runInstall(out, errOut io.Writer, cmd *cobra.Command, args []string) error 
 		if os.IsNotExist(err) {
 			err = os.MkdirAll(configDir, 0755)
 			if err != nil {
-				return errors.Wrapf(err, "Error creating config destination directory")
+				return errors.Wrapf(err, "error creating config destination directory")
 			}
 		}
 	}
 
+	selectServices(out, config)
+
 	if installService("certs") || !installDryRun {
 		err = installCert(out, errOut, configDir, config.DispatchConfig.Chart.Namespace, config.DispatchConfig.Hostname, config.DispatchConfig.TLS)
 		if err != nil {
-			return errors.Wrapf(err, "Error installing cert for %s", config.DispatchConfig.Hostname)
+			return errors.Wrapf(err, "error installing cert for %s", config.DispatchConfig.Hostname)
 		}
 		err = installCert(out, errOut, configDir, config.APIGateway.Chart.Namespace, config.APIGateway.Hostname, config.APIGateway.TLS)
 		if err != nil {
-			return errors.Wrapf(err, "Error installing  cert for %s", config.APIGateway.Hostname)
+			return errors.Wrapf(err, "error installing  cert for %s", config.APIGateway.Hostname)
 		}
 	}
 	if installChartsDir == "dispatch" {
 		err = helmRepoUpdate(out, errOut, installChartsDir, config.HelmRepositoryURL)
 		if err != nil {
-			return errors.Wrapf(err, "Error updating helm")
+			return errors.Wrapf(err, "error updating helm")
 		}
 	}
 
@@ -429,7 +491,7 @@ func runInstall(out, errOut io.Writer, cmd *cobra.Command, args []string) error 
 		}
 		err = helmInstall(out, errOut, config.Ingress.Chart, ingressOpts)
 		if err != nil {
-			return errors.Wrapf(err, "Error installing nginx-ingress chart")
+			return errors.Wrapf(err, "error installing nginx-ingress chart")
 		}
 		if config.Ingress.ServiceType == "NodePort" {
 			service := fmt.Sprintf("%s-nginx-ingress-controller", config.Ingress.Chart.Release)
@@ -451,7 +513,7 @@ func runInstall(out, errOut io.Writer, cmd *cobra.Command, args []string) error 
 		}
 		err = helmInstall(out, errOut, config.PostgresConfig.Chart, postgresOpts)
 		if err != nil {
-			return errors.Wrapf(err, "Error installing postgres chart")
+			return errors.Wrapf(err, "error installing postgres chart")
 		}
 	}
 
@@ -467,7 +529,7 @@ func runInstall(out, errOut io.Writer, cmd *cobra.Command, args []string) error 
 		}
 		err = helmInstall(out, errOut, config.APIGateway.Chart, kongOpts)
 		if err != nil {
-			return errors.Wrapf(err, "Error installing kong chart")
+			return errors.Wrapf(err, "error installing kong chart")
 		}
 
 		if config.APIGateway.ServiceType == "NodePort" {
@@ -491,15 +553,24 @@ func runInstall(out, errOut io.Writer, cmd *cobra.Command, args []string) error 
 		openFaasOpts := map[string]string{"exposeServices": "false"}
 		err = helmInstall(out, errOut, config.OpenFaas.Chart, openFaasOpts)
 		if err != nil {
-			return errors.Wrapf(err, "Error installing openfaas chart")
+			return errors.Wrapf(err, "error installing Riff chart")
 		}
 	}
+
+	if installService("riff") {
+		riffOpts := map[string]string{"exposeServices": "false"}
+		err = helmInstall(out, errOut, config.Riff.Chart, riffOpts)
+		if err != nil {
+			return errors.Wrapf(err, "error installing Riff chart")
+		}
+	}
+
 	if installService("dispatch") {
 		chart := path.Join(installChartsDir, "dispatch")
 		if installChartsDir != "dispatch" {
 			err = helmDepUp(out, errOut, chart)
 			if err != nil {
-				return errors.Wrap(err, "Error updating chart dependencies")
+				return errors.Wrap(err, "error updating chart dependencies")
 			}
 		}
 
@@ -508,26 +579,26 @@ func runInstall(out, errOut io.Writer, cmd *cobra.Command, args []string) error 
 			cookie := make([]byte, 16)
 			_, err := rand.Read(cookie)
 			if err != nil {
-				return errors.Wrap(err, "Error creating cookie secret")
+				return errors.Wrap(err, "error creating cookie secret")
 			}
 			config.DispatchConfig.OAuth2Proxy.CookieSecret = base64.StdEncoding.EncodeToString(cookie)
 		}
 
-		openFaasAuth := fmt.Sprintf(
+		registryAuth := fmt.Sprintf(
 			`{"username":"%s","password":"%s","email":"%s"}`,
-			config.DispatchConfig.OpenFaasRepo.Username,
-			config.DispatchConfig.OpenFaasRepo.Password,
-			config.DispatchConfig.OpenFaasRepo.Email)
+			config.DispatchConfig.DockerRegistry.Username,
+			config.DispatchConfig.DockerRegistry.Password,
+			config.DispatchConfig.DockerRegistry.Email)
 
-		openFaasAuthEncoded := base64.StdEncoding.EncodeToString([]byte(openFaasAuth))
+		registryAuthEncoded := base64.StdEncoding.EncodeToString([]byte(registryAuth))
 		dispatchOpts := map[string]string{
 			"global.host":                                  config.DispatchConfig.Hostname,
 			"global.port":                                  strconv.Itoa(config.DispatchConfig.Port),
 			"global.debug":                                 strconv.FormatBool(config.DispatchConfig.Debug),
 			"global.trace":                                 strconv.FormatBool(config.DispatchConfig.Trace),
 			"global.data.persist":                          strconv.FormatBool(config.DispatchConfig.PersistData),
-			"function-manager.faas.openfaas.registryAuth":  openFaasAuthEncoded,
-			"function-manager.faas.openfaas.imageRegistry": config.DispatchConfig.OpenFaasRepo.Host,
+			"function-manager.faas.openfaas.registryAuth":  registryAuthEncoded,
+			"function-manager.faas.openfaas.imageRegistry": config.DispatchConfig.DockerRegistry.Host,
 			"oauth2-proxy.app.clientID":                    config.DispatchConfig.OAuth2Proxy.ClientID,
 			"oauth2-proxy.app.clientSecret":                config.DispatchConfig.OAuth2Proxy.ClientSecret,
 			"oauth2-proxy.app.cookieSecret":                config.DispatchConfig.OAuth2Proxy.CookieSecret,

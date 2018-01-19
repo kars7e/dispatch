@@ -42,7 +42,14 @@ openfaas:
     namespace: openfaas
     release: openfaas
   exposeService: false
+riff:
+  chart:
+    chart: riff
+    namespace: riff
+    release: riff
+    repo: https://riff-charts.storage.googleapis.com
 dispatch:
+  faasBackend: openfaas
   chart:
     chart: dispatch
     namespace: dispatch
@@ -59,7 +66,7 @@ dispatch:
   debug: true
   trace: true
   persistData: false
-  openfaasRepository:
+  dockerRegistry:
     host: <host>
     username: <username>
     email: <email>@vmware.com
