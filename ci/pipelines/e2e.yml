@@ -102,16 +102,26 @@ jobs:
 - name: build-images
   public: true
   on_failure:
+    do:
+    - put: dispatch-pr
+      params: {path: dispatch, context: dispatch-e2e, status: failure}
+    - put: dispatch-pr
+      params: {path: dispatch, context: dispatch-e2e-images, status: failure}
+  on_success:
     put: dispatch-pr
-    params: {path: dispatch, context: dispatch-e2e, status: failure}
+    params: {path: dispatch, context: dispatch-e2e-images, status: success}
   plan:
   - get: dispatch
     resource: dispatch-pr
     trigger: true
     version: every
-  - put: dispatch-pr
-    params: {path: dispatch, context: dispatch-e2e, status: pending}
-    get_params: {fetch_merge: true}
+  - aggregate:
+    - put: dispatch-pr
+      params: {path: dispatch, context: dispatch-e2e, status: pending}
+      get_params: {fetch_merge: true}
+    - put: dispatch-pr
+      params: {path: dispatch, context: dispatch-e2e-images, status: pending}
+      get_params: {fetch_merge: true}
   - task: build-binaries
     file: dispatch/ci/e2e/binaries.yml
   - task: prepare-images
@@ -156,12 +166,14 @@ jobs:
         dockerfile: build-context/secret-store/Dockerfile
         tag: build-context/tag
 
-- name: deploy-dispatch
+- name: deploy-dispatch-with-openfaas
   public: true
   on_failure:
     do:
     - put: dispatch-pr
       params: {path: dispatch, context: dispatch-e2e, status: failure}
+    - put: dispatch-pr
+      params: {path: dispatch, context: dispatch-e2e-openfaas, status: failure}
     - task: Cleanup cluster
       file: dispatch/ci/e2e/cleanup.yml
       input_mapping:
@@ -178,49 +190,144 @@ jobs:
       version: every
     - get: keyval
       passed: [build-images]
+  - put: dispatch-pr
+    params: {path: dispatch, context: dispatch-e2e-openfaas, status: pending}
+    get_params: {fetch_merge: true}
   - task: build-cli
     file: dispatch/ci/e2e/build-cli.yml
   - put: k8s-clusters
     params:
       acquire: true
   - task: deploy-dispatch
-    file: dispatch/ci/e2e/deploy-dispatch.yml
+    file: dispatch/ci/e2e/deploy-dispatch-with-openfaas.yml
     input_mapping:
       cluster: k8s-clusters
       properties: keyval
 
-- name: run-tests
+- name: deploy-dispatch-with-riff
   public: true
-  plan:
-  - aggregate:
-    - get: dispatch
-      passed: [deploy-dispatch]
-      resource: dispatch-pr
-      trigger: true
-      version: every
-    - get: k8s-clusters
-      passed: [deploy-dispatch]
-  - task: build-cli
-    file: dispatch/ci/e2e/build-cli.yml
-  - task: e2e-tests
-    file: dispatch/ci/e2e/run-tests.yml
-    input_mapping:
-      cluster: k8s-clusters
   on_failure:
     do:
     - put: dispatch-pr
       params: {path: dispatch, context: dispatch-e2e, status: failure}
-    - task: Collect logs
-      file: dispatch/ci/e2e/collect-logs.yml
+    - put: dispatch-pr
+      params: {path: dispatch, context: dispatch-e2e-riff, status: failure}
+    - task: Cleanup cluster
+      file: dispatch/ci/e2e/cleanup.yml
       input_mapping:
         cluster: k8s-clusters
         properties: keyval
-    - put: logs-bucket
-      params:
-        file: dispatch-logs/*.tar.gz
+    - put: k8s-clusters
+      params: {release: k8s-clusters}
+  plan:
+  - aggregate:
+    - get: dispatch
+      passed: [build-images]
+      resource: dispatch-pr
+      trigger: true
+      version: every
+    - get: keyval
+      passed: [build-images]
+  - put: dispatch-pr
+    params: {path: dispatch, context: dispatch-e2e-riff, status: pending}
+    get_params: {fetch_merge: true}
+  - task: build-cli
+    file: dispatch/ci/e2e/build-cli.yml
+  - put: k8s-clusters
+    params:
+      acquire: true
+  - task: deploy-dispatch
+    file: dispatch/ci/e2e/deploy-dispatch-with-riff.yml
+    input_mapping:
+      cluster: k8s-clusters
+      properties: keyval
+
+- name: run-tests-openfaas
+  public: true
+  plan:
+  - aggregate:
+    - get: dispatch
+      passed: [deploy-dispatch-with-openfaas]
+      resource: dispatch-pr
+      trigger: true
+      version: every
+    - get: k8s-clusters
+      passed: [deploy-dispatch-with-openfaas]
+  - task: build-cli
+    file: dispatch/ci/e2e/build-cli.yml
+  - task: e2e-tests
+    file: dispatch/ci/e2e/run-tests-openfaas.yml
+    input_mapping:
+      cluster: k8s-clusters
+  on_failure:
+    aggregate:
+    - put: dispatch-pr
+      params: {path: dispatch, context: dispatch-e2e, status: failure}
+    - put: dispatch-pr
+      params: {path: dispatch, context: dispatch-e2e-openfaas, status: failure}
+    - do:
+      - task: Collect logs
+        file: dispatch/ci/e2e/collect-logs.yml
+        input_mapping:
+          cluster: k8s-clusters
+          properties: keyval
+      - put: logs-bucket
+        params:
+          file: dispatch-logs/*.tar.gz
   on_success:
-    put: dispatch-pr
-    params: {path: dispatch, context: dispatch-e2e, status: success}
+    aggregate:
+    - put: dispatch-pr
+      params: {path: dispatch, context: dispatch-e2e, status: success}
+    - put: dispatch-pr
+      params: {path: dispatch, context: dispatch-e2e-openfaas, status: success}
+  ensure:
+    do:
+    - task: Cleanup cluster
+      file: dispatch/ci/e2e/cleanup.yml
+      input_mapping:
+        cluster: k8s-clusters
+        properties: keyval
+    - put: k8s-clusters
+      params: {release: k8s-clusters}
+
+- name: run-tests-riff
+  public: true
+  plan:
+  - aggregate:
+    - get: dispatch
+      passed: [deploy-dispatch-with-riff]
+      resource: dispatch-pr
+      trigger: true
+      version: every
+    - get: k8s-clusters
+      passed: [deploy-dispatch-with-riff]
+  - task: build-cli
+    file: dispatch/ci/e2e/build-cli.yml
+  - task: e2e-tests
+    file: dispatch/ci/e2e/run-tests-riff.yml
+    input_mapping:
+      cluster: k8s-clusters
+  on_failure:
+    aggregate:
+    - put: dispatch-pr
+      params: {path: dispatch, context: dispatch-e2e, status: failure}
+    - put: dispatch-pr
+      params: {path: dispatch, context: dispatch-e2e-riff, status: failure}
+    - do:
+      - task: Collect logs
+        file: dispatch/ci/e2e/collect-logs.yml
+        input_mapping:
+          cluster: k8s-clusters
+          properties: keyval
+      - put: logs-bucket
+        params:
+          file: dispatch-logs/*.tar.gz
+  on_success:
+    aggregate:
+    - put: dispatch-pr
+      params: {path: dispatch, context: dispatch-e2e, status: success}
+    - put: dispatch-pr
+      params: {path: dispatch, context: dispatch-e2e-riff, status: success}
   ensure:
     do:
     - task: Cleanup cluster
