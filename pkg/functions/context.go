@@ -20,7 +20,11 @@ const (
 	LogsKey        = "logs"
 	EventKey       = "event"
 	HTTPContextKey = "httpContext"
+	TracingKey     = "tracingSpan"
 )
+
+// Context provides function context
+type Context map[string]interface{}
 
 // Logs returns the logs as a list of strings
 func (ctx Context) Logs() models.Logs {

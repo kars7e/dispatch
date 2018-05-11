@@ -8,33 +8,31 @@ package injectors
 import (
 	"context"
 
-	"github.com/vmware/dispatch/pkg/entity-store"
-
 	apiclient "github.com/go-openapi/runtime/client"
-
 	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
+
+	"github.com/vmware/dispatch/pkg/client"
+	"github.com/vmware/dispatch/pkg/entity-store"
 	"github.com/vmware/dispatch/pkg/functions"
-	secretclient "github.com/vmware/dispatch/pkg/secret-store/gen/client"
 	serviceclient "github.com/vmware/dispatch/pkg/service-manager/gen/client"
 	serviceinstance "github.com/vmware/dispatch/pkg/service-manager/gen/client/service_instance"
-
-	log "github.com/sirupsen/logrus"
 )
 
 type serviceInjector struct {
-	secretClient  *secretclient.SecretStore
+	secretClient  client.SecretsClient
 	serviceClient *serviceclient.ServiceManager
 }
 
 // NewServiceInjector create a new secret injector
-func NewServiceInjector(secretClient *secretclient.SecretStore, serviceClient *serviceclient.ServiceManager) functions.ServiceInjector {
+func NewServiceInjector(secretClient client.SecretsClient, serviceClient *serviceclient.ServiceManager) functions.ServiceInjector {
 	return &serviceInjector{
 		secretClient:  secretClient,
 		serviceClient: serviceClient,
 	}
 }
 
-func getServiceBindings(serviceClient *serviceclient.ServiceManager, secretClient *secretclient.SecretStore, serviceNames []string, cookie string) (map[string]interface{}, error) {
+func getServiceBindings(serviceClient *serviceclient.ServiceManager, secretClient client.SecretsClient, serviceNames []string, cookie string) (map[string]interface{}, error) {
 	bindings := make(map[string]interface{})
 	apiKeyAuth := apiclient.APIKeyAuth("cookie", "header", cookie)
 	for _, name := range serviceNames {
@@ -51,7 +49,7 @@ func getServiceBindings(serviceClient *serviceclient.ServiceManager, secretClien
 			return nil, errors.Errorf("failed to get service bindings current status %s", resp.Payload.Binding.Status)
 		}
 		log.Debugf("getting service binding %s for service %s", resp.Payload.ID, name)
-		secrets, err := getSecrets(secretClient, []string{resp.Payload.ID.String()}, cookie)
+		secrets, err := getSecrets(context.TODO(), secretClient, []string{resp.Payload.ID.String()})
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to get service binding secrets for service instance %s", name)
 		}

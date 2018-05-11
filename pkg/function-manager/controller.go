@@ -10,14 +10,14 @@ import (
 	"reflect"
 	"time"
 
-	apiclient "github.com/go-openapi/runtime/client"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
+	"github.com/vmware/dispatch/pkg/client"
 
 	"github.com/vmware/dispatch/pkg/controller"
 	"github.com/vmware/dispatch/pkg/entity-store"
 	"github.com/vmware/dispatch/pkg/functions"
-	"github.com/vmware/dispatch/pkg/image-manager/gen/client/image"
 	imagemodels "github.com/vmware/dispatch/pkg/image-manager/gen/models"
 	"github.com/vmware/dispatch/pkg/trace"
 )
@@ -31,7 +31,7 @@ type ControllerConfig struct {
 type funcEntityHandler struct {
 	FaaS      functions.FaaSDriver
 	Store     entitystore.EntityStore
-	ImgClient ImageManager
+	ImgClient ImageGetter
 }
 
 // Type returns the reflect.Type of a functions.Function
@@ -47,12 +47,18 @@ func (h *funcEntityHandler) Add(obj entitystore.Entity) (err error) {
 
 	e := obj.(*functions.Function)
 
+	tr := opentracing.StartSpan("FunctionManager.AddFunctionEntity",
+		opentracing.Tag{Key: "function-name", Value: e.Name},
+		opentracing.Tag{Key: "function-id", Value: e.ID},
+	)
+	defer tr.Finish()
+
 	defer func() {
 		log.Debugf("function org=%s, name=%s, id=%s, status=%s", e.OrganizationID, e.Name, e.ID, e.Status)
 		h.Store.UpdateWithError(e, err)
 	}()
 
-	img, err := h.getImage(e.ImageName)
+	img, err := h.getImage(opentracing.ContextWithSpan(context.Background(), tr), e.ImageName)
 	if err != nil {
 		return errors.Wrapf(err, "Error when fetching image for function %s", e.Name)
 	}
@@ -164,17 +170,12 @@ func (h *funcEntityHandler) Sync(organizationID string, resyncPeriod time.Durati
 	return controller.DefaultSync(h.Store, h.Type(), organizationID, resyncPeriod, syncFilter(resyncPeriod))
 }
 
-func (h *funcEntityHandler) getImage(imageName string) (*imagemodels.Image, error) {
+func (h *funcEntityHandler) getImage(ctx context.Context, imageName string) (*client.Image, error) {
 	defer trace.Trace("")()
 
-	apiKeyAuth := apiclient.APIKeyAuth("cookie", "header", "cookie") // TODO replace "cookie"
-	resp, err := h.ImgClient.GetImageByName(
-		&image.GetImageByNameParams{
-			ImageName: imageName,
-			Context:   context.Background(),
-		}, apiKeyAuth)
+	image, err := h.ImgClient.GetImage(ctx, imageName)
 	if err == nil {
-		return resp.Payload, nil
+		return image, nil
 	}
 	return nil, errors.Wrapf(err, "failed to get image: '%s'", imageName)
 }
@@ -198,6 +199,11 @@ func (h *runEntityHandler) Add(obj entitystore.Entity) (err error) {
 
 	run := obj.(*functions.FnRun)
 	defer run.Done()
+	tr := opentracing.StartSpan("FunctionManager.AddFunctionRunEntity",
+		opentracing.Tag{Key: "function-name", Value: run.FunctionName},
+		opentracing.Tag{Key: "run-id", Value: run.ID},
+	)
+	defer tr.Finish()
 
 	defer func() { h.Store.UpdateWithError(run, err) }()
 
@@ -210,6 +216,8 @@ func (h *runEntityHandler) Add(obj entitystore.Entity) (err error) {
 	}
 
 	ctx := functions.Context{}
+
+	ctx[functions.TracingKey] = tr
 
 	if run.Event != nil {
 		ctx[functions.EventKey] = run.Event
@@ -279,7 +287,7 @@ func (h *runEntityHandler) Error(obj entitystore.Entity) error {
 }
 
 // NewController is the contstructor for the function manager controller
-func NewController(config *ControllerConfig, store entitystore.EntityStore, faas functions.FaaSDriver, runner functions.Runner, imgClient ImageManager) controller.Controller {
+func NewController(config *ControllerConfig, store entitystore.EntityStore, faas functions.FaaSDriver, runner functions.Runner, imgClient ImageGetter) controller.Controller {
 
 	defer trace.Trace("")()
 

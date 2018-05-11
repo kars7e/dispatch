@@ -7,9 +7,6 @@ package functions
 
 // NO TESTS
 
-// Context provides function context
-type Context map[string]interface{}
-
 // Message contains context and payload for function invocations and events
 type Message struct {
 	Context Context     `json:"context"`

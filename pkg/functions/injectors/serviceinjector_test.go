@@ -8,15 +8,14 @@ import (
 	"testing"
 
 	"github.com/go-openapi/strfmt"
-	uuid "github.com/satori/go.uuid"
+	"github.com/satori/go.uuid"
 	"github.com/stretchr/testify/assert"
-
 	"github.com/stretchr/testify/mock"
-	"github.com/vmware/dispatch/pkg/functions/mocks"
 
+	"github.com/vmware/dispatch/pkg/client"
+	clientmocks "github.com/vmware/dispatch/pkg/client/mocks"
 	"github.com/vmware/dispatch/pkg/functions"
-	secretclient "github.com/vmware/dispatch/pkg/secret-store/gen/client"
-	"github.com/vmware/dispatch/pkg/secret-store/gen/client/secret"
+	"github.com/vmware/dispatch/pkg/functions/mocks"
 	"github.com/vmware/dispatch/pkg/secret-store/gen/models"
 	serviceclient "github.com/vmware/dispatch/pkg/service-manager/gen/client"
 	service "github.com/vmware/dispatch/pkg/service-manager/gen/client/service_instance"
@@ -44,18 +43,17 @@ func TestInjectService(t *testing.T) {
 				},
 			}}, nil)
 
-	secretTransport := &mocks.ClientTransport{}
-	secretTransport.On("Submit", mock.Anything).Return(
-		&secret.GetSecretOK{
-			Payload: &models.Secret{
+	secretsClient := &clientmocks.SecretsClient{}
+	secretsClient.On("GetSecret", mock.Anything, mock.Anything).Return(
+		&client.Secret{
+			Secret: models.Secret{
 				Name:    &serviceID,
 				Secrets: expectedSecretValue,
 			}}, nil)
 
-	secretStore := secretclient.New(secretTransport, strfmt.Default)
 	serviceManager := serviceclient.New(serviceTransport, strfmt.Default)
 
-	injector := NewServiceInjector(secretStore, serviceManager)
+	injector := NewServiceInjector(secretsClient, serviceManager)
 
 	cookie := "testCookie"
 

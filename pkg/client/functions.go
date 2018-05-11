@@ -7,16 +7,14 @@ package client
 
 import (
 	"context"
-	"strings"
 
 	"github.com/go-openapi/runtime"
-	httptransport "github.com/go-openapi/runtime/client"
 	"github.com/go-openapi/strfmt"
 	"github.com/pkg/errors"
-	"github.com/vmware/dispatch/pkg/function-manager/gen/client/runner"
-	"github.com/vmware/dispatch/pkg/function-manager/gen/client/store"
 
 	swaggerclient "github.com/vmware/dispatch/pkg/function-manager/gen/client"
+	"github.com/vmware/dispatch/pkg/function-manager/gen/client/runner"
+	"github.com/vmware/dispatch/pkg/function-manager/gen/client/store"
 	"github.com/vmware/dispatch/pkg/function-manager/gen/models"
 )
 
@@ -55,15 +53,8 @@ type DefaultFunctionsClient struct {
 }
 
 // NewFunctionsClient is used to create a new functions client
-func NewFunctionsClient(path string, auth runtime.ClientAuthInfoWriter) FunctionsClient {
-	schemas := []string{"http"}
-	if idx := strings.Index(path, "://"); idx != -1 {
-		// http schema included in path
-		schemas = []string{path[:idx]}
-		path = path[idx+3:]
-
-	}
-	transport := httptransport.New(path, swaggerclient.DefaultBasePath, schemas)
+func NewFunctionsClient(host string, auth runtime.ClientAuthInfoWriter) FunctionsClient {
+	transport := DefaultHTTPClient(host, swaggerclient.DefaultBasePath)
 	return &DefaultFunctionsClient{
 		client: swaggerclient.New(transport, strfmt.Default),
 		auth:   auth,

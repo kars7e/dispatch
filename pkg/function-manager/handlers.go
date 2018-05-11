@@ -6,12 +6,12 @@
 package functionmanager
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 
-	"github.com/go-openapi/runtime"
 	httptransport "github.com/go-openapi/runtime/client"
 	"github.com/go-openapi/runtime/middleware"
 	"github.com/go-openapi/spec"
@@ -21,6 +21,7 @@ import (
 	"github.com/satori/go.uuid"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/vmware/dispatch/pkg/client"
 	"github.com/vmware/dispatch/pkg/controller"
 	"github.com/vmware/dispatch/pkg/entity-store"
 	dispatcherrors "github.com/vmware/dispatch/pkg/errors"
@@ -31,10 +32,7 @@ import (
 	fnrunner "github.com/vmware/dispatch/pkg/function-manager/gen/restapi/operations/runner"
 	fnstore "github.com/vmware/dispatch/pkg/function-manager/gen/restapi/operations/store"
 	"github.com/vmware/dispatch/pkg/functions"
-	imageclient "github.com/vmware/dispatch/pkg/image-manager/gen/client"
-	imageclientimage "github.com/vmware/dispatch/pkg/image-manager/gen/client/image"
 	imagemodels "github.com/vmware/dispatch/pkg/image-manager/gen/models"
-	secretclient "github.com/vmware/dispatch/pkg/secret-store/gen/client"
 	serviceclient "github.com/vmware/dispatch/pkg/service-manager/gen/client"
 	"github.com/vmware/dispatch/pkg/trace"
 	"github.com/vmware/dispatch/pkg/utils"
@@ -229,16 +227,9 @@ func NewHandlers(watcher controller.Watcher, store entitystore.EntityStore) *Han
 	}
 }
 
-// ImageManager is an interface to the image manager service
-type ImageManager interface {
-	GetImageByName(*imageclientimage.GetImageByNameParams, runtime.ClientAuthInfoWriter) (*imageclientimage.GetImageByNameOK, error)
-}
-
-// ImageManagerClient creates an ImageManager
-func ImageManagerClient() ImageManager {
-	defer trace.Trace("ImageManagerClient")()
-	transport := httptransport.New(FunctionManagerFlags.ImageManager, imageclient.DefaultBasePath, []string{"http"})
-	return imageclient.New(transport, strfmt.Default).Image
+// ImageGetter is an interface to retrieve an image entity
+type ImageGetter interface {
+	GetImage(ctx context.Context, imageName string) (*client.Image, error)
 }
 
 // FileImageManager is an ImageManager which is backed by a static map of images
@@ -246,19 +237,19 @@ type FileImageManager struct {
 	Images map[string]*imagemodels.Image
 }
 
-// GetImageByName returns an image based queried by name
-func (m *FileImageManager) GetImageByName(params *imageclientimage.GetImageByNameParams, writer runtime.ClientAuthInfoWriter) (*imageclientimage.GetImageByNameOK, error) {
-	image, ok := m.Images[params.ImageName]
+// GetImage returns an image based queried by name
+func (m *FileImageManager) GetImage(ctx context.Context, imageName string) (*client.Image, error) {
+	image, ok := m.Images[imageName]
 	if ok {
-		return &imageclientimage.GetImageByNameOK{
-			Payload: image,
+		return &client.Image{
+			Image: *image,
 		}, nil
 	}
-	return nil, fmt.Errorf("Missing image %s", params.ImageName)
+	return nil, fmt.Errorf("missing image %s", imageName)
 }
 
 // FileImageManagerClient returns a FileImageManager after populating the map with a JSON file
-func FileImageManagerClient() ImageManager {
+func FileImageManagerClient() *FileImageManager {
 	defer trace.Trace("")()
 	b, err := ioutil.ReadFile(FunctionManagerFlags.FileImageManager)
 	if err != nil {
@@ -269,13 +260,6 @@ func FileImageManagerClient() ImageManager {
 	return &FileImageManager{
 		Images: images,
 	}
-}
-
-// SecretStoreClient returns a client to the secret store
-func SecretStoreClient() *secretclient.SecretStore {
-	defer trace.Trace("")()
-	transport := httptransport.New(FunctionManagerFlags.SecretStore, secretclient.DefaultBasePath, []string{"http"})
-	return secretclient.New(transport, strfmt.Default)
 }
 
 // ServiceManagerClient returns a client to the secret store

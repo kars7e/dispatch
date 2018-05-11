@@ -15,8 +15,8 @@ import (
 	"github.com/jessevdk/go-flags"
 	"github.com/justinas/alice"
 	log "github.com/sirupsen/logrus"
-	"github.com/vmware/dispatch/pkg/utils"
 
+	"github.com/vmware/dispatch/pkg/client"
 	"github.com/vmware/dispatch/pkg/config"
 	"github.com/vmware/dispatch/pkg/entity-store"
 	"github.com/vmware/dispatch/pkg/function-manager"
@@ -32,6 +32,7 @@ import (
 	"github.com/vmware/dispatch/pkg/functions/validator"
 	"github.com/vmware/dispatch/pkg/middleware"
 	"github.com/vmware/dispatch/pkg/trace"
+	"github.com/vmware/dispatch/pkg/utils"
 )
 
 var drivers = map[string]func(string) functions.FaaSDriver{
@@ -183,11 +184,12 @@ func main() {
 		ServiceInjector: injectors.NewServiceInjector(functionmanager.SecretStoreClient(), functionmanager.ServiceManagerClient()),
 	})
 
-	imc := functionmanager.ImageManagerClient()
+	var imageGetter functionmanager.ImageGetter
+	imageGetter = client.NewImagesClient(functionmanager.FunctionManagerFlags.ImageManager, client.AuthWithToken("cookie"))
 	if config.Global.Function.FileImageManager != "" {
-		imc = functionmanager.FileImageManagerClient()
+		imageGetter = functionmanager.FileImageManagerClient()
 	}
-	controller := functionmanager.NewController(c, es, faas, r, imc)
+	controller := functionmanager.NewController(c, es, faas, r, imageGetter)
 	defer controller.Shutdown()
 	controller.Start()
 

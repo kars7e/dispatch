@@ -7,15 +7,12 @@ package injectors
 import (
 	"testing"
 
-	"github.com/go-openapi/strfmt"
 	"github.com/stretchr/testify/assert"
-
 	"github.com/stretchr/testify/mock"
-	"github.com/vmware/dispatch/pkg/functions/mocks"
 
+	"github.com/vmware/dispatch/pkg/client"
+	"github.com/vmware/dispatch/pkg/client/mocks"
 	"github.com/vmware/dispatch/pkg/functions"
-	secretclient "github.com/vmware/dispatch/pkg/secret-store/gen/client"
-	"github.com/vmware/dispatch/pkg/secret-store/gen/client/secret"
 	"github.com/vmware/dispatch/pkg/secret-store/gen/models"
 )
 
@@ -28,17 +25,16 @@ func TestInjectSecret(t *testing.T) {
 
 	expectedOutput := map[string]interface{}{"secret1": "value1", "secret2": "value2"}
 
-	secretTransport := &mocks.ClientTransport{}
-	secretTransport.On("Submit", mock.Anything).Return(
-		&secret.GetSecretOK{
-			Payload: &models.Secret{
+	secret := client.Secret{}
+	secretsClient := &mocks.SecretsClient{}
+	secretsClient.On("GetSecret", mock.Anything, mock.Anything).Return(
+		&client.Secret{
+			Secret: models.Secret{
 				Name:    &expectedSecretName,
 				Secrets: expectedSecretValue,
 			}}, nil)
 
-	secretStore := secretclient.New(secretTransport, strfmt.Default)
-
-	injector := NewSecretInjector(secretStore)
+	injector := NewSecretInjector(secretsClient)
 
 	cookie := "testCookie"
 
