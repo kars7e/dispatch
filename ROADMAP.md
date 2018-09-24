@@ -23,14 +23,14 @@ is feature complete.
 
 ## Dispatch-Solo
 
-Dispatch introduced "local mode" with v0.21.  Dispatch could now be run as a single binary, locally, without Kubernetes.
+Dispatch introduced "local mode" with v0.1.21.  Dispatch could now be run as a single binary, locally, without Kubernetes.
 The goals were simple:
 
 1. Easy to develop locally
 2. Easy to get started for evaluation
 3. Easy to distribute
 
-Dispatch-Solo is a Dispatch with *only* supports local mode.  It will be a leaner Dispatch which removes the Kubernetes
+Dispatch-Solo is a Dispatch which *only* supports local mode.  It will be a leaner Dispatch which removes the Kubernetes
 support and focuses on lowering the barrier to entry to actually use Dispatch.
 
 Because Dispatch and serverless is still in its infancy, understanding use-cases is the highest priority.  It therefore
@@ -51,7 +51,7 @@ At this point we would be back to a single code base.  This would be the preferr
     - [ ] OVA (VMware)
     - [ ] UI/Wizard configurable
 - [ ] Full functional compatibility with Dispatch v0.1 (excluding service catalog)
-    - [ ] Enable function drivers
+    - [ ] Enable event drivers
     - [ ] Enable authentication/authorization
 - [ ] Support HTTPS
     - [ ] Generate self-signed certificates
@@ -62,10 +62,10 @@ At this point we would be back to a single code base.  This would be the preferr
 ### Dispatch-Solo (v0.2) ~ 1/2019
 
 - [ ] Package as PhotonOS based VM image
-    - [ ] AMI (VMware)
-- [ ] Migrage to Knative compatible base images
+    - [ ] AMI (AWS)
+- [ ] Migrate to Knative-compatible base images
 - [ ] Remove Kubernetes dependencies from code and binary
-- [ ] Update API to reflect a Knative compatible Dispatch
+- [ ] Update API to reflect a Knative-compatible Dispatch
 - [ ] Update CI/e2e tests
 - [ ] Initial function/driver (bundle) catalog support
 
