@@ -20,8 +20,8 @@ import (
 	"github.com/docker/docker/api/types"
 	docker "github.com/docker/docker/client"
 	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
 
+	"github.com/vmware/dispatch/pkg/log"
 	"github.com/vmware/dispatch/pkg/trace"
 	"github.com/vmware/dispatch/pkg/utils"
 )
@@ -35,7 +35,6 @@ func DockerError(r io.ReadCloser, err error) error {
 	var sb strings.Builder
 	s := bufio.NewScanner(r)
 	for s.Scan() {
-		log.Debug(s.Text())
 		result := struct {
 			Message *string `json:"message,omitempty"`
 			Error   *string `json:"error,omitempty"`
@@ -82,6 +81,8 @@ func BuildAndPushFromDir(ctx context.Context, client docker.ImageAPIClient, dir,
 func Build(ctx context.Context, client docker.ImageAPIClient, dir, name string, buildArgs map[string]*string) error {
 	span, ctx := trace.Trace(ctx, "")
 	defer span.Finish()
+
+	log, ctx := log.WithRequestID(ctx)
 
 	files, _ := ioutil.ReadDir(dir)
 	for _, f := range files {

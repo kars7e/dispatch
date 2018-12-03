@@ -14,12 +14,12 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/satori/go.uuid"
-	log "github.com/sirupsen/logrus"
 
 	"github.com/vmware/dispatch/pkg/api/v1"
 	"github.com/vmware/dispatch/pkg/controller"
 	"github.com/vmware/dispatch/pkg/entity-store"
 	"github.com/vmware/dispatch/pkg/functions"
+	"github.com/vmware/dispatch/pkg/log"
 	"github.com/vmware/dispatch/pkg/trace"
 )
 
@@ -44,6 +44,7 @@ func (h *funcEntityHandler) Type() reflect.Type {
 func (h *funcEntityHandler) Add(ctx context.Context, obj entitystore.Entity) (err error) {
 	span, ctx := trace.Trace(ctx, "")
 	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 
 	e := obj.(*functions.Function)
 
@@ -94,6 +95,7 @@ func (h *funcEntityHandler) Add(ctx context.Context, obj entitystore.Entity) (er
 func (h *funcEntityHandler) resolveSourceURL(ctx context.Context, organizationID string, sourceURL string) ([]byte, error) {
 	span, ctx := trace.Trace(ctx, "")
 	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 
 	scheme, err := getScheme(sourceURL)
 	if err != nil {
@@ -122,6 +124,7 @@ func (h *funcEntityHandler) resolveSourceURL(ctx context.Context, organizationID
 func (h *funcEntityHandler) Update(ctx context.Context, obj entitystore.Entity) error {
 	span, ctx := trace.Trace(ctx, "")
 	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 
 	e := obj.(*functions.Function)
 
@@ -148,6 +151,7 @@ func (h *funcEntityHandler) Update(ctx context.Context, obj entitystore.Entity) 
 func (h *funcEntityHandler) Delete(ctx context.Context, obj entitystore.Entity) error {
 	span, ctx := trace.Trace(ctx, "")
 	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 
 	e := obj.(*functions.Function)
 
@@ -272,6 +276,7 @@ func (err *invocationError) Error() string {
 func (h *runEntityHandler) Add(ctx context.Context, obj entitystore.Entity) (err error) {
 	span, ctx := trace.Trace(ctx, "")
 	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 
 	run := obj.(*functions.FnRun)
 	defer run.Done()

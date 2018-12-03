@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
+	"github.com/vmware/dispatch/pkg/log"
 
 	"github.com/vmware/dispatch/pkg/controller"
 	entitystore "github.com/vmware/dispatch/pkg/entity-store"
@@ -35,6 +35,8 @@ func (h *baseImageEntityHandler) Type() reflect.Type {
 func (h *baseImageEntityHandler) Add(ctx context.Context, obj entitystore.Entity) (err error) {
 	span, ctx := trace.Trace(ctx, "")
 	defer span.Finish()
+
+	log, ctx := log.WithRequestID(ctx)
 
 	bi := obj.(*BaseImage)
 
@@ -60,6 +62,7 @@ func (h *baseImageEntityHandler) Update(ctx context.Context, obj entitystore.Ent
 func (h *baseImageEntityHandler) Delete(ctx context.Context, obj entitystore.Entity) error {
 	span, ctx := trace.Trace(ctx, "")
 	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 
 	bi := obj.(*BaseImage)
 
@@ -104,6 +107,7 @@ func (h *imageEntityHandler) Type() reflect.Type {
 func (h *imageEntityHandler) Add(ctx context.Context, obj entitystore.Entity) (err error) {
 	span, ctx := trace.Trace(ctx, "")
 	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 
 	i := obj.(*Image)
 
@@ -140,6 +144,7 @@ func (h *imageEntityHandler) Add(ctx context.Context, obj entitystore.Entity) (e
 func (h *imageEntityHandler) Update(ctx context.Context, obj entitystore.Entity) error {
 	span, ctx := trace.Trace(ctx, "")
 	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 
 	i := obj.(*Image)
 
@@ -153,6 +158,7 @@ func (h *imageEntityHandler) Update(ctx context.Context, obj entitystore.Entity)
 func (h *imageEntityHandler) Delete(ctx context.Context, obj entitystore.Entity) error {
 	span, ctx := trace.Trace(ctx, "")
 	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 
 	i := obj.(*Image)
 

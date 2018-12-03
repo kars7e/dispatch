@@ -22,10 +22,10 @@ import (
 	docker "github.com/docker/docker/client"
 	"github.com/go-openapi/swag"
 	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
 
 	"github.com/vmware/dispatch/pkg/entity-store"
 	"github.com/vmware/dispatch/pkg/images"
+	"github.com/vmware/dispatch/pkg/log"
 	"github.com/vmware/dispatch/pkg/trace"
 	"github.com/vmware/dispatch/pkg/utils"
 )
@@ -88,6 +88,7 @@ func (b *BaseImageBuilder) baseImagePull(ctx context.Context, baseImage *BaseIma
 	// TODO (bjung): Need to use a lock of some sort in case we have multiple instances of image builder running
 	span, ctx := trace.Trace(ctx, "")
 	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 	ctx, cancel := context.WithTimeout(ctx, 120*time.Second)
 	defer cancel()
 	log.Printf("Pulling image %s/%s from %s", baseImage.OrganizationID, baseImage.Name, baseImage.DockerURL)
@@ -112,7 +113,6 @@ func (b *BaseImageBuilder) baseImagePull(ctx context.Context, baseImage *BaseIma
 			// Assume this is a transient error.
 			return errors.Wrap(err, "error unmarshalling docker status")
 		}
-		log.Debugf("Docker status: %+v\n", status)
 		if status.Error != "" {
 			return errors.Wrap(fmt.Errorf(status.ErrorDetail.Message), "docker error when pulling image")
 		}
@@ -128,6 +128,7 @@ func (b *BaseImageBuilder) baseImagePull(ctx context.Context, baseImage *BaseIma
 func (b *BaseImageBuilder) baseImageDelete(ctx context.Context, baseImage *BaseImage) error {
 	span, ctx := trace.Trace(ctx, "")
 	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -199,6 +200,7 @@ func DockerImageStatus(ctx context.Context, client docker.ImageAPIClient, images
 func (b *BaseImageBuilder) baseImageStatus(ctx context.Context) ([]entitystore.Entity, error) {
 	span, ctx := trace.Trace(ctx, "")
 	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -324,6 +326,7 @@ func (b *ImageBuilder) writePackagesFile(file string, image *Image) error {
 }
 
 func (b *ImageBuilder) imagePull(ctx context.Context, image *Image) error {
+	log, ctx := log.WithRequestID(ctx)
 	log.Debugf("Pulling image %s/%s", image.OrganizationID, image.Name)
 	if err := images.DockerError(b.dockerClient.ImagePull(context.Background(), image.DockerURL, dockerTypes.ImagePullOptions{})); err != nil {
 		return errors.Wrapf(err, "failed to pull image '%s'", image.DockerURL)
@@ -399,6 +402,7 @@ func (b *ImageBuilder) imageStatus(ctx context.Context) ([]entitystore.Entity, e
 func (b *ImageBuilder) imageDelete(ctx context.Context, image *Image) error {
 	span, ctx := trace.Trace(ctx, "")
 	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -415,6 +419,7 @@ func (b *ImageBuilder) imageDelete(ctx context.Context, image *Image) error {
 func (b *ImageBuilder) imageUpdate(ctx context.Context, image *Image) error {
 	span, ctx := trace.Trace(ctx, "")
 	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 
 	var bi BaseImage
 	err := b.es.Get(ctx, image.OrganizationID, image.BaseImageName, entitystore.Options{}, &bi)

@@ -21,7 +21,6 @@ import (
 	"github.com/go-openapi/swag"
 	"github.com/pkg/errors"
 	"github.com/satori/go.uuid"
-	log "github.com/sirupsen/logrus"
 
 	"github.com/vmware/dispatch/pkg/api/v1"
 	"github.com/vmware/dispatch/pkg/controller"
@@ -32,6 +31,7 @@ import (
 	fnrunner "github.com/vmware/dispatch/pkg/function-manager/gen/restapi/operations/runner"
 	fnstore "github.com/vmware/dispatch/pkg/function-manager/gen/restapi/operations/store"
 	"github.com/vmware/dispatch/pkg/functions"
+	"github.com/vmware/dispatch/pkg/log"
 	"github.com/vmware/dispatch/pkg/trace"
 	"github.com/vmware/dispatch/pkg/utils"
 )
@@ -283,7 +283,7 @@ func (h *Handlers) ConfigureHandlers(api middleware.RoutableAPI) {
 		return token, nil
 	}
 
-	a.Logger = log.Printf
+	a.Logger = log.GetLogger(context.Background()).Printf
 	a.StoreAddFunctionHandler = fnstore.AddFunctionHandlerFunc(h.addFunction)
 	a.StoreGetFunctionHandler = fnstore.GetFunctionHandlerFunc(h.getFunction)
 	a.StoreDeleteFunctionHandler = fnstore.DeleteFunctionHandlerFunc(h.deleteFunction)
@@ -297,6 +297,7 @@ func (h *Handlers) ConfigureHandlers(api middleware.RoutableAPI) {
 func (h *Handlers) addFunction(params fnstore.AddFunctionParams, principal interface{}) middleware.Responder {
 	span, ctx := trace.Trace(params.HTTPRequest.Context(), "")
 	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 
 	var s *functions.Source
 	var err error
@@ -371,6 +372,7 @@ func (h *Handlers) addFunction(params fnstore.AddFunctionParams, principal inter
 func (h *Handlers) getFunction(params fnstore.GetFunctionParams, principal interface{}) middleware.Responder {
 	span, ctx := trace.Trace(params.HTTPRequest.Context(), "")
 	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 
 	e := new(functions.Function)
 
@@ -392,6 +394,7 @@ func (h *Handlers) getFunction(params fnstore.GetFunctionParams, principal inter
 func (h *Handlers) deleteFunction(params fnstore.DeleteFunctionParams, principal interface{}) middleware.Responder {
 	span, ctx := trace.Trace(params.HTTPRequest.Context(), "")
 	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 
 	e := new(functions.Function)
 
@@ -426,6 +429,7 @@ func (h *Handlers) deleteFunction(params fnstore.DeleteFunctionParams, principal
 func (h *Handlers) getFunctions(params fnstore.GetFunctionsParams, principal interface{}) middleware.Responder {
 	span, ctx := trace.Trace(params.HTTPRequest.Context(), "")
 	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 
 	opts := entitystore.Options{
 		Filter: entitystore.FilterEverything(),
@@ -446,6 +450,7 @@ func (h *Handlers) getFunctions(params fnstore.GetFunctionsParams, principal int
 func (h *Handlers) updateFunction(params fnstore.UpdateFunctionParams, principal interface{}) middleware.Responder {
 	span, ctx := trace.Trace(params.HTTPRequest.Context(), "")
 	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 
 	functionModel := params.Body
 	if len(functionModel.Source) == 0 && len(functionModel.SourceURL) == 0 {
@@ -589,6 +594,7 @@ func (h *Handlers) updateFunction(params fnstore.UpdateFunctionParams, principal
 func (h *Handlers) runFunction(params fnrunner.RunFunctionParams, principal interface{}) middleware.Responder {
 	span, ctx := trace.Trace(params.HTTPRequest.Context(), "")
 	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 
 	if params.FunctionName == nil {
 		return fnrunner.NewRunFunctionBadRequest().WithPayload(&v1.Error{
@@ -651,6 +657,7 @@ func (h *Handlers) runFunction(params fnrunner.RunFunctionParams, principal inte
 func (h *Handlers) getRun(params fnrunner.GetRunParams, principal interface{}) middleware.Responder {
 	span, ctx := trace.Trace(params.HTTPRequest.Context(), "")
 	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 
 	run := functions.FnRun{}
 
@@ -685,6 +692,10 @@ func (h *Handlers) getRun(params fnrunner.GetRunParams, principal interface{}) m
 }
 
 func getFilteredRuns(ctx context.Context, store entitystore.EntityStore, orgID string, functionName *string, since *int64, tags []string) ([]*functions.FnRun, error) {
+	span, ctx := trace.Trace(ctx, "")
+	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
+
 	var runs []*functions.FnRun
 	var err error
 	opts := entitystore.Options{

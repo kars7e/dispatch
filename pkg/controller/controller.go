@@ -12,7 +12,7 @@ import (
 
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
+	"github.com/vmware/dispatch/pkg/log"
 	"golang.org/x/sync/semaphore"
 
 	"github.com/vmware/dispatch/pkg/entity-store"
@@ -55,15 +55,17 @@ func (w *Watcher) OnAction(ctx context.Context, e entitystore.Entity) {
 	span, _ := trace.Trace(ctx, "")
 	defer span.Finish()
 
+	logger, ctx := log.WithRequestID(ctx)
+
 	if w == nil || *w == nil {
-		log.Warnf("nil watcher, skipping entity update: %s - %s", e.GetName(), e.GetStatus())
+		logger.Warnf("nil watcher, skipping entity update: %s - %s", e.GetName(), e.GetStatus())
 		return
 	}
 	// this event can outlive the context passed to OnAction, causing all sorts of troubles.
 	// for example, HTTP request context is canceled when request is finished, which can result
 	// in context being instantly canceled for any future WithTimeout or WithDeadline calls.
 	// for this reason, we use fresh context with tracing span.
-	*w <- WatchEvent{e, opentracing.ContextWithSpan(context.Background(), span)}
+	*w <- WatchEvent{e, opentracing.ContextWithSpan(log.WithLogger(context.Background(), logger), span)}
 }
 
 // Controller defines an interface for a generic controller
@@ -127,6 +129,8 @@ func (dc *DefaultController) AddEntityHandler(h EntityHandler) {
 func (dc *DefaultController) processItem(ctx context.Context, e entitystore.Entity) error {
 	span, ctx := trace.Trace(ctx, "")
 	defer span.Finish()
+
+	log, ctx := log.WithRequestID(ctx)
 
 	log.Debugf("Processing Item: %v (%v) with status %v", e.GetName(), e.GetID(), e.GetStatus())
 
@@ -205,6 +209,8 @@ func (dc *DefaultController) sync() error {
 	span, ctx := trace.Trace(context.Background(), "controller sync")
 	defer span.Finish()
 
+	log, ctx := log.WithRequestID(ctx)
+
 	sem := semaphore.NewWeighted(int64(dc.options.Workers))
 	for _, handler := range dc.entityHandlers {
 		entities, err := handler.Sync(ctx, dc.options.ResyncPeriod)
@@ -240,15 +246,16 @@ func (dc *DefaultController) run(stopChan <-chan bool) {
 	go func() {
 		sem := semaphore.NewWeighted(int64(dc.options.Workers))
 		for watchEvent := range dc.watcher {
-			if err := sem.Acquire(context.Background(), 1); err != nil {
-				log.Warnf("Failed to acquire semaphore: %v", err)
+			if err := sem.Acquire(watchEvent.Ctx, 1); err != nil {
+				log.GetLogger(watchEvent.Ctx).Warnf("Failed to acquire semaphore: %v", err)
 				break
 			}
 			go func(event WatchEvent) {
+				log, ctx := log.WithRequestID(event.Ctx)
 				e := event.Entity
 				defer sem.Release(1)
 				log.Infof("received event=%s entity=%s", e.GetStatus(), e.GetName())
-				if err := dc.processItem(event.Ctx, e); err != nil {
+				if err := dc.processItem(ctx, e); err != nil {
 					log.Error(err)
 				}
 			}(watchEvent)
@@ -258,6 +265,7 @@ func (dc *DefaultController) run(stopChan <-chan bool) {
 	go func() {
 		for range resyncTicker.C {
 			func() {
+				log := log.GetLogger(context.Background())
 				log.Debugf("%s periodic syncing with the underlying driver", dc.options.ServiceName)
 				if err := dc.sync(); err != nil {
 					log.Error(err)

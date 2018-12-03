@@ -9,20 +9,19 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/vmware/dispatch/pkg/controller"
-	"github.com/vmware/dispatch/pkg/utils"
-
 	"github.com/go-openapi/runtime/middleware"
 	"github.com/go-openapi/strfmt"
 	"github.com/go-openapi/swag"
-	log "github.com/sirupsen/logrus"
 
 	"github.com/vmware/dispatch/pkg/api/v1"
+	"github.com/vmware/dispatch/pkg/controller"
 	entitystore "github.com/vmware/dispatch/pkg/entity-store"
 	"github.com/vmware/dispatch/pkg/image-manager/gen/restapi/operations"
 	baseimage "github.com/vmware/dispatch/pkg/image-manager/gen/restapi/operations/base_image"
 	"github.com/vmware/dispatch/pkg/image-manager/gen/restapi/operations/image"
+	"github.com/vmware/dispatch/pkg/log"
 	"github.com/vmware/dispatch/pkg/trace"
+	"github.com/vmware/dispatch/pkg/utils"
 )
 
 var statusMap = map[v1.Status]entitystore.Status{
@@ -198,6 +197,7 @@ func (h *Handlers) ConfigureHandlers(api middleware.RoutableAPI) {
 func (h *Handlers) addBaseImage(params baseimage.AddBaseImageParams, principal interface{}) middleware.Responder {
 	span, ctx := trace.Trace(params.HTTPRequest.Context(), "")
 	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 
 	baseImageRequest := params.Body
 	e := baseImageModelToEntity(baseImageRequest)
@@ -228,6 +228,7 @@ func (h *Handlers) addBaseImage(params baseimage.AddBaseImageParams, principal i
 func (h *Handlers) getBaseImageByName(params baseimage.GetBaseImageByNameParams, principal interface{}) middleware.Responder {
 	span, ctx := trace.Trace(params.HTTPRequest.Context(), "")
 	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 
 	e := BaseImage{}
 	err := h.Store.Get(ctx, params.XDispatchOrg, params.BaseImageName, entitystore.Options{}, &e)
@@ -247,6 +248,7 @@ func (h *Handlers) getBaseImageByName(params baseimage.GetBaseImageByNameParams,
 func (h *Handlers) getBaseImages(params baseimage.GetBaseImagesParams, principal interface{}) middleware.Responder {
 	span, ctx := trace.Trace(params.HTTPRequest.Context(), "")
 	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 
 	var images []*BaseImage
 
@@ -271,6 +273,7 @@ func (h *Handlers) getBaseImages(params baseimage.GetBaseImagesParams, principal
 func (h *Handlers) updateBaseImageByName(params baseimage.UpdateBaseImageByNameParams, principal interface{}) middleware.Responder {
 	span, ctx := trace.Trace(params.HTTPRequest.Context(), "")
 	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 
 	e := BaseImage{}
 	err := h.Store.Get(ctx, params.XDispatchOrg, params.BaseImageName, entitystore.Options{}, &e)
@@ -313,6 +316,7 @@ func (h *Handlers) updateBaseImageByName(params baseimage.UpdateBaseImageByNameP
 func (h *Handlers) deleteBaseImageByName(params baseimage.DeleteBaseImageByNameParams, principal interface{}) middleware.Responder {
 	span, ctx := trace.Trace(params.HTTPRequest.Context(), "")
 	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 
 	e := BaseImage{}
 	err := h.Store.Get(ctx, params.XDispatchOrg, params.BaseImageName, entitystore.Options{}, &e)
@@ -343,6 +347,7 @@ func (h *Handlers) deleteBaseImageByName(params baseimage.DeleteBaseImageByNameP
 func (h *Handlers) addImage(params image.AddImageParams, principal interface{}) middleware.Responder {
 	span, ctx := trace.Trace(params.HTTPRequest.Context(), "")
 	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 
 	imageRequest := params.Body
 	e := imageModelToEntity(imageRequest)
@@ -386,6 +391,7 @@ func (h *Handlers) addImage(params image.AddImageParams, principal interface{}) 
 func (h *Handlers) getImageByName(params image.GetImageByNameParams, principal interface{}) middleware.Responder {
 	span, ctx := trace.Trace(params.HTTPRequest.Context(), "")
 	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 
 	e := Image{}
 
@@ -411,6 +417,7 @@ func (h *Handlers) getImageByName(params image.GetImageByNameParams, principal i
 func (h *Handlers) getImages(params image.GetImagesParams, principal interface{}) middleware.Responder {
 	span, ctx := trace.Trace(params.HTTPRequest.Context(), "")
 	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 
 	var images []*Image
 
@@ -437,6 +444,7 @@ func (h *Handlers) getImages(params image.GetImagesParams, principal interface{}
 func (h *Handlers) updateImageByName(params image.UpdateImageByNameParams, principal interface{}) middleware.Responder {
 	span, ctx := trace.Trace(params.HTTPRequest.Context(), "")
 	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 
 	imageRequest := params.Body
 	e := imageModelToEntity(imageRequest)
@@ -492,6 +500,7 @@ func (h *Handlers) updateImageByName(params image.UpdateImageByNameParams, princ
 func (h *Handlers) deleteImageByName(params image.DeleteImageByNameParams, principal interface{}) middleware.Responder {
 	span, ctx := trace.Trace(params.HTTPRequest.Context(), "")
 	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 
 	e := Image{}
 

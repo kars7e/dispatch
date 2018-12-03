@@ -19,7 +19,7 @@ import (
 	docker "github.com/docker/docker/client"
 	"github.com/go-openapi/swag"
 	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
+	"github.com/vmware/dispatch/pkg/log"
 
 	"github.com/vmware/dispatch/pkg/images"
 	"github.com/vmware/dispatch/pkg/trace"
@@ -52,8 +52,12 @@ const (
 	functionTemplateDirDefault = "/function-template"
 )
 
-func (ib *DockerImageBuilder) copyFunctionTemplate(tmpDir string, image string) error {
+func (ib *DockerImageBuilder) copyFunctionTemplate(ctx context.Context, tmpDir string, image string) error {
+	span, ctx := trace.Trace(ctx, "")
+	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 	log.Debugf("Creating a container for image: %s", image)
+
 	resp, err := ib.docker.ContainerCreate(context.Background(), &container.Config{
 		Image: image,
 	}, nil, nil, "")
@@ -82,6 +86,7 @@ func (ib *DockerImageBuilder) copyFunctionTemplate(tmpDir string, image string) 
 func (ib *DockerImageBuilder) BuildImage(ctx context.Context, f *Function, code []byte) (string, error) {
 	span, ctx := trace.Trace(ctx, "")
 	defer span.Finish()
+	log, ctx := log.WithRequestID(ctx)
 
 	name := imageName(ib.ImageRegistry, f.FaasID)
 	log.Debugf("Building image '%s'", name)
@@ -104,7 +109,7 @@ func (ib *DockerImageBuilder) BuildImage(ctx context.Context, f *Function, code 
 		return "", errors.Wrap(err, "failed to write dockerfile")
 	}
 
-	if err := ib.copyFunctionTemplate(tmpDir, f.ImageURL); err != nil {
+	if err := ib.copyFunctionTemplate(ctx, tmpDir, f.ImageURL); err != nil {
 		return "", err
 	}
 

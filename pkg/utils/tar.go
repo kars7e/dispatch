@@ -15,7 +15,6 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
 )
 
 // IsDir determines if path is a directory
@@ -58,7 +57,6 @@ func Tar(source string, w io.Writer) error {
 			}
 
 			header.Name = "./" + strings.TrimPrefix(path, prefix)
-			log.Debugf("tar: writing header: %s", header.Name)
 
 			if err := tarball.WriteHeader(header); err != nil {
 				return err

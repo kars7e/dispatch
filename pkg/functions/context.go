@@ -10,8 +10,6 @@ import (
 	"io"
 
 	"github.com/mitchellh/mapstructure"
-	log "github.com/sirupsen/logrus"
-
 	"github.com/vmware/dispatch/pkg/api/v1"
 )
 
@@ -26,7 +24,6 @@ const (
 
 // Logs returns the logs as a list of strings
 func (ctx Context) Logs() v1.Logs {
-	log.Debugf(`Logs from ctx["logs"]: %#v`, ctx[LogsKey])
 	switch logs := ctx[LogsKey].(type) {
 	case v1.Logs:
 		return logs
@@ -74,7 +71,6 @@ func (ctx Context) ReadLogs(stderrReader io.Reader, stdoutReader io.Reader) {
 
 // AddLogs adds the logs into the context
 func (ctx Context) AddLogs(logs v1.Logs) {
-	log.Debugf("adding logs: %#v", logs)
 	l := ctx.Logs()
 	l.Stderr = append(l.Stderr, logs.Stderr...)
 	l.Stdout = append(l.Stdout, logs.Stdout...)
